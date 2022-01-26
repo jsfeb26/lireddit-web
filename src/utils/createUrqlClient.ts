@@ -2,6 +2,7 @@ import {
   dedupExchange,
   Exchange,
   fetchExchange,
+  gql,
   stringifyVariables,
 } from "urql";
 import { pipe, tap } from "wonka";
@@ -15,6 +16,7 @@ import {
   MeDocument,
   LoginMutation,
   RegisterMutation,
+  VoteMutationVariables,
 } from "../generated/graphql";
 
 const errorExchange: Exchange =
@@ -146,6 +148,48 @@ export const createUrqlClient = (ssrExchange: any) => ({
       },
       updates: {
         Mutation: {
+          vote: (_result, args, cache, info) => {
+            const { postId, value } = args as VoteMutationVariables;
+            const data = cache.readFragment(
+              gql`
+                fragment _ on Post {
+                  id
+                  points
+                  voteStatus
+                }
+              `,
+              { id: postId }
+            );
+
+            if (data) {
+              // same vote so don't do anything
+              if (data.voteStatus === args.value) {
+                return;
+              }
+
+              // if we haven't voted increment by 1 and if we are changing then it should change by 2
+              const newPoints =
+                (data.points as number) + (!data.voteStatus ? 1 : 2) * value;
+              cache.writeFragment(
+                gql`
+                  fragment _ on Post {
+                    points
+                    voteStatus
+                  }
+                `,
+                { id: postId, points: newPoints, voteStatus: value }
+              );
+            }
+          },
+          createPost: (_result, args, cache, info) => {
+            const allFields = cache.inspectFields("Query");
+            const fieldInfos = allFields.filter(
+              (info) => info.fieldName === "posts"
+            );
+            fieldInfos.forEach((fi) => {
+              cache.invalidate("Query", "posts", fi.arguments || {});
+            });
+          },
           logout: (_result, args, cache, info) => {
             betterUpdateQuery<LogoutMutation, MeQuery>(
               cache,
