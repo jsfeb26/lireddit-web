@@ -8,6 +8,7 @@ interface NavBarProps {}
 
 export const NavBar: React.FC<NavBarProps> = ({}) => {
   const [{ fetching: logoutFetching }, logout] = useLogoutMutation();
+  // Don't need to pause anymore because we are passing the cookie to the server and we will know the current user
   const [{ data, fetching }] = useMeQuery({ pause: isServer() });
   let body = null;
 
